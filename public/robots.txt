@@ -1,2 +1,10 @@
 User-agent: *
-Disallow:
+Allow: /
+Disallow: /admin
+Disallow: /dashboard
+Disallow: /cart
+Disallow: /api/
+Disallow: /up$
+Disallow: /*?*
+
+Sitemap: https://mrhommeaudio.com/sitemap.xml
