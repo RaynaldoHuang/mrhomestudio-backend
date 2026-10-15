@@ -28,8 +28,6 @@ class SitemapTest extends TestCase
         $this->assertSame([
             'https://mrhommeaudio.com/',
             'https://mrhommeaudio.com/about',
-            'https://mrhommeaudio.com/services',
-            'https://mrhommeaudio.com/contact',
             'https://mrhommeaudio.com/collection/all-products',
         ], $this->locations($xml));
         $this->assertCount(0, $xml->xpath('//*[local-name()="lastmod"]'));
@@ -46,10 +44,10 @@ class SitemapTest extends TestCase
 
         $xml = simplexml_load_string($response->getContent());
         $locations = $this->locations($xml);
-        $this->assertCount(106, $locations);
+        $this->assertCount(104, $locations);
         $this->assertContains('https://mrhommeaudio.com/product/'.$products->last()->id, $locations);
         $this->assertNotContains('https://mrhommeaudio.com/product/'.$inactive->id, $locations);
-        $this->assertSame('2026-10-15T01:00:00+00:00', (string) $xml->url[5]->lastmod);
+        $this->assertSame('2026-10-15T01:00:00+00:00', (string) $xml->url[3]->lastmod);
     }
 
     public function test_categories_and_menu_links_are_canonical_unique_and_active(): void
@@ -83,8 +81,6 @@ class SitemapTest extends TestCase
         $this->assertSame([
             'https://mrhommeaudio.com/',
             'https://mrhommeaudio.com/about',
-            'https://mrhommeaudio.com/services',
-            'https://mrhommeaudio.com/contact',
             'https://mrhommeaudio.com/collection/all-products',
             'https://mrhommeaudio.com/collection/speakers',
             'https://mrhommeaudio.com/product/'.$product->id,
@@ -93,6 +89,9 @@ class SitemapTest extends TestCase
         ], $this->locations(simplexml_load_string($response->getContent())));
     }
 
+    #[TestWith(['/services'])]
+    #[TestWith(['/contact'])]
+    #[TestWith(['https://mrhommeaudio.com/services?source=menu'])]
     #[TestWith(['/admin/login'])]
     #[TestWith(['/dashboard'])]
     #[TestWith(['/cart'])]
@@ -117,7 +116,7 @@ class SitemapTest extends TestCase
 
         $response = $this->get('/sitemap.xml')->assertOk();
 
-        $this->assertCount(5, $this->locations(simplexml_load_string($response->getContent())));
+        $this->assertCount(3, $this->locations(simplexml_load_string($response->getContent())));
     }
 
     public function test_menu_cannot_reintroduce_an_inactive_product(): void

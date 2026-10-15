@@ -13,7 +13,7 @@ class SitemapController extends Controller
     public function __invoke(): Response
     {
         $baseUrl = rtrim(config('app.url'), '/');
-        $urls = array_fill_keys(['/', '/about', '/services', '/contact', '/collection/all-products'], null);
+        $urls = array_fill_keys(['/', '/about', '/collection/all-products'], null);
         $inactiveCollections = [];
 
         foreach (Category::query()->select(['id', 'slug', 'is_active'])->orderBy('id')->cursor() as $category) {
