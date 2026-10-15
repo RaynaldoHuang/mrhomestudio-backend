@@ -43,12 +43,16 @@ class MegaMenuControllerTest extends TestCase
 
         $response = $this->post('/api/admin/mega-menus', [
             ...$this->validPayload(),
-            'featured_image' => UploadedFile::fake()->image('speakers.jpg', 1200, 800),
+            'featured_image' => UploadedFile::fake()->image('speakers.jpg', 3000, 1500),
         ], ['Accept' => 'application/json']);
 
         $response->assertCreated()->assertJsonPath('data.label', 'Speakers');
         $menu = MegaMenu::query()->where('label', 'Speakers')->firstOrFail();
         Storage::disk('public')->assertExists($menu->featured_image_path);
+        $this->assertStringEndsWith('.webp', $menu->featured_image_path);
+        $this->assertSame('image/webp', getimagesizefromstring(Storage::disk('public')->get($menu->featured_image_path))['mime']);
+        $dimensions = getimagesizefromstring(Storage::disk('public')->get($menu->featured_image_path));
+        $this->assertSame([2400, 1200], [$dimensions[0], $dimensions[1]]);
     }
 
     public function test_invalid_nested_links_are_rejected(): void

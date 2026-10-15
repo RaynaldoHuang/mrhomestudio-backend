@@ -36,7 +36,7 @@ class ProductControllerTest extends TestCase
             ...$this->validPayload(),
             'show_on_home' => '1',
             'images' => [
-                UploadedFile::fake()->image('thumbnail.jpg'),
+                UploadedFile::fake()->image('thumbnail.jpg', 2000, 1000),
                 UploadedFile::fake()->image('detail.jpg'),
             ],
         ], ['Accept' => 'application/json']);
@@ -53,6 +53,12 @@ class ProductControllerTest extends TestCase
         $this->assertSame('reference-speaker', $product->slug);
         $this->assertDatabaseHas('products', ['id' => $product->id, 'show_on_home' => true]);
         Storage::disk('public')->assertExists($product->images()->firstOrFail()->path);
+        foreach ($product->images as $image) {
+            $this->assertStringEndsWith('.webp', $image->path);
+            $this->assertSame('image/webp', getimagesizefromstring(Storage::disk('public')->get($image->path))['mime']);
+        }
+        $thumbnail = getimagesizefromstring(Storage::disk('public')->get($product->images->first()->path));
+        $this->assertSame([1600, 800], [$thumbnail[0], $thumbnail[1]]);
     }
 
     public function test_store_rejects_more_than_five_images(): void
@@ -86,6 +92,9 @@ class ProductControllerTest extends TestCase
         $response->assertOk()->assertJsonCount(2, 'data.images');
         Storage::disk('public')->assertMissing('products/old-one.jpg');
         Storage::disk('public')->assertExists($product->refresh()->images()->latest('id')->firstOrFail()->path);
+        $newImage = $product->images()->reorder()->latest('id')->firstOrFail();
+        $this->assertStringEndsWith('.webp', $newImage->path);
+        $this->assertSame('image/webp', getimagesizefromstring(Storage::disk('public')->get($newImage->path))['mime']);
     }
 
     public function test_destroy_removes_product_and_images(): void

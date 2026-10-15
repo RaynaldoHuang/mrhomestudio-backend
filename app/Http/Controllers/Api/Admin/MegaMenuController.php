@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreMegaMenuRequest;
 use App\Http\Requests\UpdateMegaMenuRequest;
 use App\Http\Resources\MegaMenuResource;
+use App\ImageUpload;
 use App\Models\MegaMenu;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -26,12 +27,12 @@ class MegaMenuController extends Controller
     /**
      * Store a newly created resource in storage.
      */
-    public function store(StoreMegaMenuRequest $request): JsonResponse
+    public function store(StoreMegaMenuRequest $request, ImageUpload $imageUpload): JsonResponse
     {
         $attributes = $request->safe()->except('featured_image');
 
         if ($request->hasFile('featured_image')) {
-            $attributes['featured_image_path'] = $request->file('featured_image')->store('mega-menus', 'public');
+            $attributes['featured_image_path'] = $imageUpload->store($request->file('featured_image'), 'mega-menus', 2400, 'featured_image');
         }
 
         $megaMenu = MegaMenu::query()->create($attributes);
@@ -50,13 +51,13 @@ class MegaMenuController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(UpdateMegaMenuRequest $request, MegaMenu $megaMenu): MegaMenuResource
+    public function update(UpdateMegaMenuRequest $request, MegaMenu $megaMenu, ImageUpload $imageUpload): MegaMenuResource
     {
         $attributes = $request->safe()->except('featured_image');
         $previousImagePath = $megaMenu->featured_image_path;
 
         if ($request->hasFile('featured_image')) {
-            $attributes['featured_image_path'] = $request->file('featured_image')->store('mega-menus', 'public');
+            $attributes['featured_image_path'] = $imageUpload->store($request->file('featured_image'), 'mega-menus', 2400, 'featured_image');
         }
 
         $megaMenu->update($attributes);

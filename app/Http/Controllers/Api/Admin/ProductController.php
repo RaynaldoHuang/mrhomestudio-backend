@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreProductRequest;
 use App\Http\Requests\UpdateProductRequest;
 use App\Http\Resources\ProductResource;
+use App\ImageUpload;
 use App\Models\Category;
 use App\Models\Product;
 use Illuminate\Http\JsonResponse;
@@ -14,6 +15,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 class ProductController extends Controller
 {
@@ -24,7 +26,7 @@ class ProductController extends Controller
         );
     }
 
-    public function store(StoreProductRequest $request): JsonResponse
+    public function store(StoreProductRequest $request, ImageUpload $imageUpload): JsonResponse
     {
         $attributes = $request->safe()->except('images');
         if (array_key_exists('category_id', $attributes)) {
@@ -32,18 +34,24 @@ class ProductController extends Controller
         }
         $attributes['slug'] = $this->uniqueSlug($attributes['name']);
 
-        $product = DB::transaction(function () use ($request, $attributes): Product {
-            $product = Product::query()->create($attributes);
+        $imagePaths = $imageUpload->storeMany($request->file('images', []), 'products', 1600);
+        try {
+            $product = DB::transaction(function () use ($imagePaths, $attributes): Product {
+                $product = Product::query()->create($attributes);
 
-            foreach ($request->file('images', []) as $sortOrder => $image) {
-                $product->images()->create([
-                    'path' => $image->store('products', 'public'),
-                    'sort_order' => $sortOrder,
-                ]);
-            }
+                foreach ($imagePaths as $sortOrder => $path) {
+                    $product->images()->create([
+                        'path' => $path,
+                        'sort_order' => $sortOrder,
+                    ]);
+                }
 
-            return $product;
-        });
+                return $product;
+            });
+        } catch (Throwable $exception) {
+            Storage::disk('public')->delete($imagePaths);
+            throw $exception;
+        }
 
         return (new ProductResource($product->load(['images', 'productCategory'])))->response()->setStatusCode(201);
     }
@@ -53,7 +61,7 @@ class ProductController extends Controller
         return new ProductResource($product->load(['images', 'productCategory']));
     }
 
-    public function update(UpdateProductRequest $request, Product $product): ProductResource
+    public function update(UpdateProductRequest $request, Product $product, ImageUpload $imageUpload): ProductResource
     {
         $removeImageIds = $request->validated('remove_image_ids', []);
         $imagesToRemove = $product->images()->whereIn('id', $removeImageIds)->get();
@@ -74,21 +82,27 @@ class ProductController extends Controller
             $attributes['slug'] = $this->uniqueSlug($attributes['name'], $product);
         }
 
-        DB::transaction(function () use ($request, $product, $attributes, $imagesToRemove): void {
-            $product->update($attributes);
-            $imagesToRemove->each->delete();
+        $imagePaths = $imageUpload->storeMany($request->file('images', []), 'products', 1600);
+        try {
+            DB::transaction(function () use ($imagePaths, $product, $attributes, $imagesToRemove): void {
+                $product->update($attributes);
+                $imagesToRemove->each->delete();
 
-            $nextSortOrder = (int) ($product->images()->max('sort_order') ?? -1) + 1;
-            foreach ($request->file('images', []) as $index => $image) {
-                $product->images()->create([
-                    'path' => $image->store('products', 'public'),
-                    'sort_order' => $nextSortOrder + $index,
-                ]);
-            }
+                $nextSortOrder = (int) ($product->images()->max('sort_order') ?? -1) + 1;
+                foreach ($imagePaths as $index => $path) {
+                    $product->images()->create([
+                        'path' => $path,
+                        'sort_order' => $nextSortOrder + $index,
+                    ]);
+                }
 
-            $product->images()->orderBy('sort_order')->orderBy('id')->get()
-                ->each(fn ($image, $index) => $image->update(['sort_order' => $index]));
-        });
+                $product->images()->orderBy('sort_order')->orderBy('id')->get()
+                    ->each(fn ($image, $index) => $image->update(['sort_order' => $index]));
+            });
+        } catch (Throwable $exception) {
+            Storage::disk('public')->delete($imagePaths);
+            throw $exception;
+        }
 
         foreach ($imagesToRemove as $image) {
             Storage::disk('public')->delete($image->path);

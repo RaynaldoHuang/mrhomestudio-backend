@@ -43,7 +43,7 @@ class CarouselControllerTest extends TestCase
 
         $response = $this->post('/api/admin/carousels', [
             ...$this->validPayload(),
-            'image' => UploadedFile::fake()->image('cinema.jpg', 1600, 900),
+            'image' => UploadedFile::fake()->image('cinema.jpg', 3000, 1500),
         ], ['Accept' => 'application/json']);
 
         $response
@@ -56,6 +56,10 @@ class CarouselControllerTest extends TestCase
 
         $carousel = Carousel::query()->where('title', 'Cinema at home')->firstOrFail();
         Storage::disk('public')->assertExists($carousel->image_path);
+        $this->assertStringEndsWith('.webp', $carousel->image_path);
+        $this->assertSame('image/webp', getimagesizefromstring(Storage::disk('public')->get($carousel->image_path))['mime']);
+        $dimensions = getimagesizefromstring(Storage::disk('public')->get($carousel->image_path));
+        $this->assertSame([2400, 1200], [$dimensions[0], $dimensions[1]]);
     }
 
     public function test_missing_required_fields_returns_422_without_creating_carousel(): void
@@ -92,6 +96,8 @@ class CarouselControllerTest extends TestCase
             ->assertJsonPath('data.title', 'Cinema at home');
         Storage::disk('public')->assertMissing('carousels/old.jpg');
         Storage::disk('public')->assertExists($carousel->refresh()->image_path);
+        $this->assertStringEndsWith('.webp', $carousel->image_path);
+        $this->assertSame('image/webp', getimagesizefromstring(Storage::disk('public')->get($carousel->image_path))['mime']);
     }
 
     public function test_destroy_removes_carousel_and_its_image(): void

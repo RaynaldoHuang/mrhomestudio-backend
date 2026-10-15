@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreCarouselRequest;
 use App\Http\Requests\UpdateCarouselRequest;
 use App\Http\Resources\CarouselResource;
+use App\ImageUpload;
 use App\Models\Carousel;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -26,12 +27,12 @@ class CarouselController extends Controller
     /**
      * Store a newly created resource in storage.
      */
-    public function store(StoreCarouselRequest $request): JsonResponse
+    public function store(StoreCarouselRequest $request, ImageUpload $imageUpload): JsonResponse
     {
         $attributes = $request->safe()->except('image');
 
         if ($request->hasFile('image')) {
-            $attributes['image_path'] = $request->file('image')->store('carousels', 'public');
+            $attributes['image_path'] = $imageUpload->store($request->file('image'), 'carousels', 2400, 'image');
         }
 
         $carousel = Carousel::query()->create($attributes);
@@ -42,13 +43,13 @@ class CarouselController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(UpdateCarouselRequest $request, Carousel $carousel): CarouselResource
+    public function update(UpdateCarouselRequest $request, Carousel $carousel, ImageUpload $imageUpload): CarouselResource
     {
         $attributes = $request->safe()->except('image');
         $previousImagePath = $carousel->image_path;
 
         if ($request->hasFile('image')) {
-            $attributes['image_path'] = $request->file('image')->store('carousels', 'public');
+            $attributes['image_path'] = $imageUpload->store($request->file('image'), 'carousels', 2400, 'image');
         }
 
         $carousel->update($attributes);

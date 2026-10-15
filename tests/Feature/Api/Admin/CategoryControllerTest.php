@@ -45,13 +45,17 @@ class CategoryControllerTest extends TestCase
         Storage::fake('public');
 
         $this->post('/api/admin/categories', [
-            ...$this->payload(), 'image' => UploadedFile::fake()->image('cover.jpg'),
+            ...$this->payload(), 'image' => UploadedFile::fake()->image('cover.jpg', 2000, 1000),
         ], ['Accept' => 'application/json'])
             ->assertCreated()->assertJsonPath('data.slug', 'bookshelf-speakers')->assertJsonPath('data.show_on_home', true);
 
         $category = Category::query()->firstOrFail();
         $this->assertDatabaseHas('categories', ['id' => $category->id, 'name' => 'Bookshelf Speakers', 'sort_order' => 1, 'show_on_home' => true]);
         Storage::disk('public')->assertExists($category->image_path);
+        $this->assertStringEndsWith('.webp', $category->image_path);
+        $this->assertSame('image/webp', getimagesizefromstring(Storage::disk('public')->get($category->image_path))['mime']);
+        $dimensions = getimagesizefromstring(Storage::disk('public')->get($category->image_path));
+        $this->assertSame([1600, 800], [$dimensions[0], $dimensions[1]]);
     }
 
     public function test_create_requires_cover_image(): void
@@ -100,6 +104,8 @@ class CategoryControllerTest extends TestCase
 
         Storage::disk('public')->assertMissing('categories/old.jpg');
         Storage::disk('public')->assertExists($category->refresh()->image_path);
+        $this->assertStringEndsWith('.webp', $category->image_path);
+        $this->assertSame('image/webp', getimagesizefromstring(Storage::disk('public')->get($category->image_path))['mime']);
     }
 
     public function test_home_selection_requires_cover_for_migrated_category(): void
