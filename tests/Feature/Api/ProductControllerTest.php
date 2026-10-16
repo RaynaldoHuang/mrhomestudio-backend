@@ -74,4 +74,12 @@ class ProductControllerTest extends TestCase
 
         $this->getJson("/api/products/{$product->id}")->assertNotFound();
     }
+
+    public function test_active_product_with_zero_legacy_stock_is_available_without_inventory_data(): void
+    {
+        $product = Product::factory()->create(['stock' => 0]);
+
+        $this->getJson("/api/products/{$product->id}")->assertOk()
+            ->assertJsonPath('data.id', $product->id)->assertJsonMissingPath('data.stock');
+    }
 }

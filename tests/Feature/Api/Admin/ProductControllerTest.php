@@ -176,6 +176,17 @@ class ProductControllerTest extends TestCase
         $this->assertDatabaseHas('products', ['id' => $product->id, 'category_id' => null]);
     }
 
+    public function test_update_does_not_require_stock_or_change_legacy_inventory(): void
+    {
+        $product = Product::factory()->create(['stock' => 7]);
+        $product->images()->create(['path' => 'products/existing.jpg', 'sort_order' => 0]);
+
+        $this->putJson("/api/admin/products/{$product->id}", $this->validPayload())->assertOk()
+            ->assertJsonMissingPath('data.stock');
+
+        $this->assertDatabaseHas('products', ['id' => $product->id, 'stock' => 7, 'name' => 'Reference Speaker']);
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -185,7 +196,6 @@ class ProductControllerTest extends TestCase
             'name' => 'Reference Speaker',
             'category' => 'Speakers',
             'price' => 15_000_000,
-            'stock' => 10,
             'description' => 'Detailed product description.',
             'specifications' => [['name' => 'Weight', 'value' => '12 kg']],
             'variants' => [['name' => 'Color', 'values' => ['Black', 'White']]],

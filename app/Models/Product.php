@@ -15,7 +15,6 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'category',
     'category_id',
     'price',
-    'stock',
     'description',
     'specifications',
     'variants',
@@ -49,7 +48,6 @@ class Product extends Model
     {
         return [
             'price' => 'integer',
-            'stock' => 'integer',
             'specifications' => 'array',
             'variants' => 'array',
             'is_active' => 'boolean',
