@@ -30,6 +30,7 @@ class UpdateMegaMenuRequest extends FormRequest
             'groups.*.title' => ['required', 'string', 'max:100'],
             'groups.*.links' => ['required', 'array', 'min:1', 'max:12'],
             'groups.*.links.*.label' => ['required', 'string', 'max:100'],
+            'groups.*.links.*.category_id' => ['sometimes', 'nullable', 'integer', 'exists:categories,id'],
             'groups.*.links.*.href' => ['required', 'string', 'max:2048'],
             'featured_title' => ['nullable', 'string', 'max:255'],
             'featured_url' => ['nullable', 'string', 'max:2048'],

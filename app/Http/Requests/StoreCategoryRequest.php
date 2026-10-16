@@ -18,7 +18,7 @@ class StoreCategoryRequest extends FormRequest
         return [
             'name' => ['required', 'string', 'max:100', Rule::unique('categories', 'name')->ignore($this->route('category'))],
             'description' => ['nullable', 'string', 'max:2000'],
-            'image' => [$this->isMethod('POST') ? 'required' : 'nullable', File::image()->types(['jpg', 'jpeg', 'png', 'webp'])->max('8mb')],
+            'image' => [$this->isMethod('POST') && $this->boolean('show_on_home') ? 'required' : 'nullable', File::image()->types(['jpg', 'jpeg', 'png', 'webp'])->max('8mb')],
             'sort_order' => ['required', 'integer', 'min:0'],
             'show_on_home' => ['required', 'boolean'],
             'is_active' => ['required', 'boolean'],

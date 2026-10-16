@@ -7,6 +7,7 @@ use App\Http\Requests\StoreCategoryRequest;
 use App\Http\Requests\UpdateCategoryRequest;
 use App\Http\Resources\CategoryResource;
 use App\ImageUpload;
+use App\MenuCategories;
 use App\Models\Category;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -16,9 +17,12 @@ use Illuminate\Validation\ValidationException;
 
 class CategoryController extends Controller
 {
-    public function index(): AnonymousResourceCollection
+    public function index(MenuCategories $menuCategories): AnonymousResourceCollection
     {
-        return CategoryResource::collection(Category::query()->withCount('products')->orderBy('sort_order')->orderBy('id')->get());
+        $references = $menuCategories->references();
+
+        return CategoryResource::collection(Category::query()->withCount('products')->orderBy('sort_order')->orderBy('id')->get()
+            ->each(fn (Category $category) => $category->setAttribute('menu_groups', $references[$category->id] ?? [])));
     }
 
     public function store(StoreCategoryRequest $request, ImageUpload $imageUpload): JsonResponse
@@ -34,7 +38,9 @@ class CategoryController extends Controller
             $slug = $baseSlug.'-'.$suffix++;
         }
         $attributes['slug'] = $slug;
-        $attributes['image_path'] = $imageUpload->store($request->file('image'), 'categories', 1600, 'image');
+        if ($request->hasFile('image')) {
+            $attributes['image_path'] = $imageUpload->store($request->file('image'), 'categories', 1600, 'image');
+        }
         $category = Category::query()->create($attributes);
 
         return (new CategoryResource($category))->response()->setStatusCode(201);
@@ -58,10 +64,13 @@ class CategoryController extends Controller
         return new CategoryResource($category->refresh());
     }
 
-    public function destroy(Category $category): JsonResponse
+    public function destroy(Category $category, MenuCategories $menuCategories): JsonResponse
     {
         if ($category->products()->exists()) {
             throw ValidationException::withMessages(['category' => ['Move products to another category before deleting this category.']]);
+        }
+        if (isset($menuCategories->references()[$category->id])) {
+            throw ValidationException::withMessages(['category' => ['Remove this category from Mega Menu links before deleting it.']]);
         }
         $image = $category->image_path;
         $category->delete();

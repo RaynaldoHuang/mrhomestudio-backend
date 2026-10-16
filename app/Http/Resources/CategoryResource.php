@@ -11,6 +11,7 @@ class CategoryResource extends JsonResource
     public function toArray(Request $request): array
     {
         return [
+            'menu_groups' => $this->menu_groups ?? [],
             'id' => $this->id, 'name' => $this->name, 'slug' => $this->slug,
             'description' => $this->description ?? '',
             'image_url' => $this->image_path ? Storage::disk('public')->url($this->image_path) : null,

@@ -25,7 +25,9 @@ class SitemapController extends Controller
             }
         }
 
-        foreach (Product::query()->select(['id', 'updated_at'])->where('is_active', true)->orderBy('id')->cursor() as $product) {
+        foreach (Product::query()->select(['id', 'updated_at'])->where('is_active', true)
+            ->where(fn ($query) => $query->whereNull('category_id')->orWhereHas('productCategory', fn ($category) => $category->where('is_active', true)))
+            ->orderBy('id')->cursor() as $product) {
             $urls['/product/'.$product->id] = $product->updated_at?->toAtomString();
         }
 

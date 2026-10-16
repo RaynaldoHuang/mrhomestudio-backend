@@ -2,15 +2,17 @@
 
 namespace Database\Seeders;
 
+use App\MenuCategories;
 use App\Models\MegaMenu;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\DB;
 
 class MegaMenuSeeder extends Seeder
 {
     /**
      * Run the database seeds.
      */
-    public function run(): void
+    public function run(MenuCategories $menuCategories): void
     {
         $menus = [
             [
@@ -60,15 +62,18 @@ class MegaMenuSeeder extends Seeder
         ];
 
         foreach ($menus as $menu) {
-            MegaMenu::query()->updateOrCreate(
-                ['label' => $menu['label']],
-                [
-                    ...$menu,
-                    'featured_url' => $menu['href'],
-                    'featured_image_alt' => $menu['featured_title'],
-                    'is_active' => true,
-                ],
-            );
+            DB::transaction(function () use ($menu, $menuCategories): void {
+                $menu['groups'] = $menuCategories->link($menu['groups']);
+                MegaMenu::query()->updateOrCreate(
+                    ['label' => $menu['label']],
+                    [
+                        ...$menu,
+                        'featured_url' => $menu['href'],
+                        'featured_image_alt' => $menu['featured_title'],
+                        'is_active' => true,
+                    ],
+                );
+            });
         }
     }
 
