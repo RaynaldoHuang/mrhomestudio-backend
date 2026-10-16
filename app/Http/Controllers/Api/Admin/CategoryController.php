@@ -21,7 +21,7 @@ class CategoryController extends Controller
     {
         $references = $menuCategories->references();
 
-        return CategoryResource::collection(Category::query()->withCount('products')->orderBy('sort_order')->orderBy('id')->get()
+        return CategoryResource::collection(Category::query()->whereIn('id', array_keys($references))->withCount('products')->orderBy('sort_order')->orderBy('id')->get()
             ->each(fn (Category $category) => $category->setAttribute('menu_groups', $references[$category->id] ?? [])));
     }
 
@@ -46,12 +46,15 @@ class CategoryController extends Controller
         return (new CategoryResource($category))->response()->setStatusCode(201);
     }
 
-    public function update(UpdateCategoryRequest $request, Category $category, ImageUpload $imageUpload): CategoryResource
+    public function update(UpdateCategoryRequest $request, Category $category, ImageUpload $imageUpload, MenuCategories $menuCategories): CategoryResource
     {
         if ($request->boolean('show_on_home') && ! $request->hasFile('image') && ! $category->image_path) {
             throw ValidationException::withMessages(['image' => ['Upload a cover image before displaying this category on the homepage.']]);
         }
         $attributes = $request->safe()->except('image');
+        if (isset($menuCategories->references()[$category->id])) {
+            $attributes['name'] = $category->name;
+        }
         $previousImage = $category->image_path;
         if ($request->hasFile('image')) {
             $attributes['image_path'] = $imageUpload->store($request->file('image'), 'categories', 1600, 'image');

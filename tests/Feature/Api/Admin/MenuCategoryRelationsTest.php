@@ -64,7 +64,7 @@ class MenuCategoryRelationsTest extends TestCase
 
         $this->assertDatabaseCount('categories', 1);
         $this->assertDatabaseHas('products', ['id' => $product->id, 'category_id' => $category->id]);
-        $this->assertDatabaseHas('categories', ['id' => $category->id, 'name' => 'CD Players']);
+        $this->assertDatabaseHas('categories', ['id' => $category->id, 'name' => 'Our CD Players']);
     }
 
     public function test_missing_category_id_returns_422_without_saving_menu_or_category(): void
@@ -264,6 +264,114 @@ class MenuCategoryRelationsTest extends TestCase
         $category = Category::query()->findOrFail($speakers->groups[0]['links'][0]['category_id']);
         $this->assertSame('Hi-Fi Speakers', $category->name);
         $this->assertSame('/collection/'.$category->slug, $speakers->groups[0]['links'][0]['href']);
+    }
+
+    public function test_unlinked_categories_are_hidden_from_admin_even_when_they_have_products(): void
+    {
+        $this->authenticate();
+        $linked = Category::factory()->create();
+        $orphan = Category::factory()->create();
+        $product = Product::factory()->create(['category_id' => $orphan->id]);
+        $this->menuFor($linked);
+
+        $this->getJson('/api/admin/categories')->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $linked->id);
+
+        $this->assertModelExists($orphan);
+        $this->assertDatabaseHas('products', ['id' => $product->id, 'category_id' => $orphan->id]);
+    }
+
+    public function test_removed_link_disappears_from_category_list_after_saving_menu(): void
+    {
+        $this->authenticate();
+        $removed = Category::factory()->create();
+        $menu = $this->menuFor($removed);
+        $this->putJson("/api/admin/mega-menus/{$menu->id}", $this->payload())->assertOk();
+
+        $this->getJson('/api/admin/categories')->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.name', 'CD Players');
+        $this->assertModelExists($removed);
+    }
+
+    public function test_deleted_menu_categories_are_hidden_but_shared_categories_remain_visible(): void
+    {
+        $this->authenticate();
+        $shared = Category::factory()->create();
+        $removed = Category::factory()->create();
+        $first = $this->menuFor($shared);
+        $groups = $first->groups;
+        $groups[0]['links'][] = ['label' => $removed->name, 'href' => '/collection/'.$removed->slug, 'category_id' => $removed->id];
+        $first->update(['groups' => $groups]);
+        $this->menuFor($shared);
+        $this->deleteJson("/api/admin/mega-menus/{$first->id}")->assertNoContent();
+
+        $this->getJson('/api/admin/categories')->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $shared->id);
+    }
+
+    public function test_unlinked_categories_are_hidden_from_public_and_home_lists(): void
+    {
+        Category::factory()->create(['show_on_home' => true]);
+        $linked = Category::factory()->create(['show_on_home' => true]);
+        $this->menuFor($linked);
+
+        $this->getJson('/api/categories')->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $linked->id);
+        $this->getJson('/api/categories?show_on_home=1')->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $linked->id);
+    }
+
+    public function test_renaming_shared_link_does_not_rename_another_menu_category(): void
+    {
+        $this->authenticate();
+        $original = Category::factory()->create(['name' => 'CD Players', 'slug' => 'cd-players']);
+        $menu = $this->menuFor($original);
+        $this->menuFor($original);
+        $payload = $this->payload();
+        $payload['groups'][0]['links'][0] = ['label' => 'DACs', 'href' => '/collection/dacs', 'category_id' => $original->id];
+
+        $response = $this->putJson("/api/admin/mega-menus/{$menu->id}", $payload)->assertOk();
+
+        $new = Category::query()->where('name', 'DACs')->firstOrFail();
+        $response->assertJsonPath('data.groups.0.links.0.category_id', $new->id);
+        $this->assertDatabaseHas('categories', ['id' => $original->id, 'name' => 'CD Players']);
+    }
+
+    public function test_existing_label_takes_precedence_over_a_previously_selected_category(): void
+    {
+        $this->authenticate();
+        $previous = Category::factory()->create(['name' => 'CD Players']);
+        $target = Category::factory()->create(['name' => 'DACs', 'slug' => 'dacs']);
+        $menu = $this->menuFor($previous);
+        $payload = $this->payload();
+        $payload['groups'][0]['links'][0] = ['label' => 'DACs', 'href' => '/collection/dacs', 'category_id' => $previous->id];
+
+        $this->putJson("/api/admin/mega-menus/{$menu->id}", $payload)->assertOk()
+            ->assertJsonPath('data.groups.0.links.0.category_id', $target->id);
+
+        $this->assertDatabaseHas('categories', ['id' => $previous->id, 'name' => 'CD Players']);
+    }
+
+    public function test_different_labels_with_same_url_create_distinct_categories(): void
+    {
+        $this->authenticate();
+        $payload = $this->payload();
+        $payload['groups'][0]['links'][] = ['label' => 'DACs', 'href' => '/collection/Cd players'];
+
+        $response = $this->postJson('/api/admin/mega-menus', $payload)->assertCreated();
+
+        $this->assertDatabaseCount('categories', 2);
+        $response->assertJsonPath('data.groups.0.links.0.href', '/collection/cd-players')
+            ->assertJsonPath('data.groups.0.links.1.href', '/collection/dacs');
+        $this->assertDatabaseHas('categories', ['name' => 'CD Players']);
+        $this->assertDatabaseHas('categories', ['name' => 'DACs']);
+    }
+
+    public function test_category_edit_cannot_override_link_label_name(): void
+    {
+        $this->authenticate();
+        $category = Category::factory()->create(['name' => 'CD Players']);
+        $this->menuFor($category);
+
+        $this->putJson("/api/admin/categories/{$category->id}", ['name' => 'Manual name', 'description' => 'Updated cover information', 'sort_order' => 0, 'show_on_home' => false, 'is_active' => true])
+            ->assertOk()->assertJsonPath('data.name', 'CD Players');
+
+        $this->assertDatabaseHas('categories', ['id' => $category->id, 'name' => 'CD Players', 'description' => 'Updated cover information']);
     }
 
     private function authenticate(): void

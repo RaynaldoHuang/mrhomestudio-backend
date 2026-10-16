@@ -3,6 +3,7 @@
 namespace Tests\Feature\Api\Admin;
 
 use App\Models\Category;
+use App\Models\MegaMenu;
 use App\Models\Product;
 use App\Models\User;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
@@ -32,6 +33,7 @@ class CategoryControllerTest extends TestCase
         $this->authenticate();
         $category = Category::factory()->create(['is_active' => false]);
         Product::factory()->create(['category_id' => $category->id]);
+        MegaMenu::factory()->create(['groups' => [['title' => 'Speakers', 'links' => [['label' => $category->name, 'href' => '/collection/'.$category->slug, 'category_id' => $category->id]]]]]);
 
         $this->getJson('/api/admin/categories')->assertOk()
             ->assertJsonPath('data.0.id', $category->id)

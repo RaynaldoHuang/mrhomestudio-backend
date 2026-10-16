@@ -76,7 +76,7 @@ class MegaMenuController extends Controller
 
         try {
             DB::transaction(function () use ($attributes, $megaMenu, $menuCategories): void {
-                $attributes['groups'] = $menuCategories->link($attributes['groups']);
+                $attributes['groups'] = $menuCategories->link($attributes['groups'], $megaMenu);
                 $megaMenu->update($attributes);
             });
         } catch (Throwable $exception) {

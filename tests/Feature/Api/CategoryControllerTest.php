@@ -3,6 +3,7 @@
 namespace Tests\Feature\Api;
 
 use App\Models\Category;
+use App\Models\MegaMenu;
 use App\Models\Product;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Tests\TestCase;
@@ -19,6 +20,8 @@ class CategoryControllerTest extends TestCase
         Category::factory()->create(['show_on_home' => true, 'is_active' => false]);
         Category::factory()->create(['show_on_home' => true, 'image_path' => null]);
 
+        $this->linkCategories();
+
         $this->getJson('/api/categories?show_on_home=1')
             ->assertOk()->assertJsonCount(2, 'data')
             ->assertJsonPath('data.0.id', $first->id)
@@ -30,6 +33,8 @@ class CategoryControllerTest extends TestCase
     {
         $category = Category::factory()->create(['show_on_home' => false]);
         Category::factory()->create(['is_active' => false]);
+
+        $this->linkCategories();
 
         $this->getJson('/api/categories')->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $category->id);
     }
@@ -46,5 +51,12 @@ class CategoryControllerTest extends TestCase
             ->assertJsonPath('data.0.id', $product->id)
             ->assertJsonPath('data.0.category', 'Renamed Speakers')
             ->assertJsonPath('data.0.category_slug', $category->slug);
+    }
+
+    private function linkCategories(): void
+    {
+        MegaMenu::factory()->create(['groups' => [['title' => 'Categories', 'links' => Category::query()->get()->map(fn (Category $category): array => [
+            'label' => $category->name, 'href' => '/collection/'.$category->slug, 'category_id' => $category->id,
+        ])->all()]]]);
     }
 }

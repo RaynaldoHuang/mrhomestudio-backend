@@ -23,9 +23,19 @@ class MenuCategories
     /** @param array<int, array<string, mixed>> $groups
      * @return array<int, array<string, mixed>>
      */
-    public function link(array $groups): array
+    public function link(array $groups, ?MegaMenu $currentMenu = null): array
     {
         $categories = Category::query()->get();
+        $labels = [];
+        $otherMenus = MegaMenu::query()->when($currentMenu, fn ($query) => $query->whereKeyNot($currentMenu->id))->get(['id', 'groups']);
+        $allGroups = $otherMenus->flatMap(fn (MegaMenu $menu): array => $menu->groups ?? [])->merge($groups);
+        foreach ($allGroups as $group) {
+            foreach ($group['links'] ?? [] as $link) {
+                if (isset($link['category_id'])) {
+                    $labels[(int) $link['category_id']][] = Str::lower(trim($link['label']));
+                }
+            }
+        }
 
         foreach ($groups as &$group) {
             foreach ($group['links'] as &$link) {
@@ -40,18 +50,33 @@ class MenuCategories
                     throw ValidationException::withMessages(['groups' => ['Collection URLs must have a slug of at most 255 characters.']]);
                 }
 
-                $category = isset($link['category_id']) ? $categories->firstWhere('id', (int) $link['category_id']) : null;
-                $category ??= $categories->firstWhere('slug', $slug);
-                $category ??= $categories->first(fn (Category $item): bool => Str::lower($item->name) === Str::lower(trim($link['label'])));
+                $name = trim($link['label']);
+                $normalizedName = Str::lower($name);
+                $category = $categories->first(fn (Category $item): bool => Str::lower($item->name) === $normalizedName);
                 if ($category === null) {
+                    $candidate = isset($link['category_id']) ? $categories->firstWhere('id', (int) $link['category_id']) : null;
+                    $candidate ??= $categories->firstWhere('slug', $slug);
+                    if ($candidate !== null && count(array_diff($labels[$candidate->id] ?? [], [$normalizedName])) === 0) {
+                        $category = $candidate;
+                        $category->update(['name' => $name]);
+                    }
+                }
+                if ($category === null) {
+                    $baseSlug = $categories->contains('slug', $slug) ? (Str::slug($name) ?: 'category') : $slug;
+                    $slug = $baseSlug;
+                    $suffix = 2;
+                    while ($categories->contains('slug', $slug)) {
+                        $slug = $baseSlug.'-'.$suffix++;
+                    }
                     $category = Category::query()->create([
-                        'name' => trim($link['label']), 'slug' => $slug,
+                        'name' => $name, 'slug' => $slug,
                         'sort_order' => ((int) $categories->max('sort_order')) + 1,
                         'show_on_home' => false, 'is_active' => true,
                     ]);
                     $categories->push($category);
                 }
 
+                $labels[$category->id][] = $normalizedName;
                 $link['category_id'] = $category->id;
                 $suffix = strpbrk($link['href'], '?#') ?: '';
                 $link['href'] = '/collection/'.$category->slug.$suffix;
