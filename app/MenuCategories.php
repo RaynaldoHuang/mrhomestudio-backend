@@ -9,6 +9,16 @@ use Illuminate\Validation\ValidationException;
 
 class MenuCategories
 {
+    public static function viewAllHref(string $href, string $label): string
+    {
+        $target = trim($href);
+        if (preg_match('~^/collection/?(?:[?#].*)?$~', $target)) {
+            return '/collection/'.(Str::slug($label) ?: 'all-products');
+        }
+
+        return $target;
+    }
+
     public static function collectionSlug(string $href): ?string
     {
         if (! preg_match('~^/collection/([^/?#]+)/?(?:[?#].*)?$~', trim($href), $matches)) {

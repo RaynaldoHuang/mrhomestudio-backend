@@ -22,7 +22,7 @@ class ProductController extends Controller
             $categoryIds = [];
             if ($category?->is_active !== false && $slug !== null) {
                 $menu = MegaMenu::query()->where('is_active', true)->orderBy('sort_order')->orderBy('id')->get()
-                    ->first(fn (MegaMenu $menu): bool => MenuCategories::collectionSlug($menu->href) === $slug);
+                    ->first(fn (MegaMenu $menu): bool => MenuCategories::collectionSlug(MenuCategories::viewAllHref($menu->href, $menu->label)) === $slug);
                 $categoryIds = collect($menu?->groups ?? [])->flatMap(fn (array $group): array => $group['links'])
                     ->pluck('category_id')->push($category?->id)->filter()->unique()->values()->all();
             }

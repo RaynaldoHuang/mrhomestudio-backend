@@ -33,6 +33,7 @@ class MegaMenuController extends Controller
     public function store(StoreMegaMenuRequest $request, ImageUpload $imageUpload, MenuCategories $menuCategories): JsonResponse
     {
         $attributes = $request->safe()->except('featured_image');
+        $attributes['href'] = MenuCategories::viewAllHref($attributes['href'], $attributes['label']);
 
         if ($request->hasFile('featured_image')) {
             $attributes['featured_image_path'] = $imageUpload->store($request->file('featured_image'), 'mega-menus', 2400, 'featured_image');
@@ -68,6 +69,7 @@ class MegaMenuController extends Controller
     public function update(UpdateMegaMenuRequest $request, MegaMenu $megaMenu, ImageUpload $imageUpload, MenuCategories $menuCategories): MegaMenuResource
     {
         $attributes = $request->safe()->except('featured_image');
+        $attributes['href'] = MenuCategories::viewAllHref($attributes['href'], $attributes['label']);
         $previousImagePath = $megaMenu->featured_image_path;
 
         if ($request->hasFile('featured_image')) {

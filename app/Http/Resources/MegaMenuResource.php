@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\MenuCategories;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Facades\Storage;
@@ -18,7 +19,7 @@ class MegaMenuResource extends JsonResource
         return [
             'id' => $this->id,
             'label' => $this->label,
-            'href' => $this->href,
+            'href' => MenuCategories::viewAllHref($this->href, $this->label),
             'groups' => $this->groups,
             'display_mode' => $this->display_mode ?? 'grouped',
             'featured_title' => $this->featured_title,

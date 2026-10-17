@@ -151,6 +151,37 @@ class MenuCategoryRelationsTest extends TestCase
             ->assertJsonPath('data.0.id', $wanted->id)->assertJsonPath('data.0.category_slug', 'cd-players');
     }
 
+    #[TestWith(['Source', '/collection/', 'source'])]
+    #[TestWith(['Amplifiers', '/collection/amplifiers', 'amplifiers'])]
+    #[TestWith(['Speaker', '/collection/speaker', 'speaker'])]
+    #[TestWith(['Accessories', '/collection/accessories', 'accessories'])]
+    public function test_view_all_includes_all_active_products_from_its_menu_categories(string $label, string $href, string $slug): void
+    {
+        $firstCategory = Category::factory()->create();
+        $secondCategory = Category::factory()->create();
+        $hiddenCategory = Category::factory()->create(['is_active' => false]);
+        $menu = MegaMenu::factory()->create(['label' => $label, 'href' => $href, 'groups' => [[
+            'title' => 'Types', 'links' => [
+                ['label' => $firstCategory->name, 'href' => '/collection/'.$firstCategory->slug, 'category_id' => $firstCategory->id],
+                ['label' => $secondCategory->name, 'href' => '/collection/'.$secondCategory->slug, 'category_id' => $secondCategory->id],
+                ['label' => $hiddenCategory->name, 'href' => '/collection/'.$hiddenCategory->slug, 'category_id' => $hiddenCategory->id],
+            ],
+        ]]]);
+        $first = Product::factory()->create(['category_id' => $firstCategory->id, 'created_at' => now()->subDay()]);
+        $second = Product::factory()->create(['category_id' => $secondCategory->id]);
+        Product::factory()->inactive()->create(['category_id' => $firstCategory->id]);
+        Product::factory()->create(['category_id' => $hiddenCategory->id]);
+        Product::factory()->create(['category_id' => Category::factory()->create()->id]);
+        Product::factory()->create(['category_id' => null]);
+        MegaMenu::factory()->inactive()->create(['href' => '/collection/'.$slug]);
+
+        $this->getJson('/api/mega-menus')->assertOk()->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.href', '/collection/'.$slug);
+        $this->getJson('/api/products?collection='.$slug)->assertOk()->assertJsonCount(2, 'data')
+            ->assertJsonPath('data.0.id', $second->id)->assertJsonPath('data.1.id', $first->id);
+        $this->assertDatabaseHas('mega_menus', ['id' => $menu->id, 'href' => $href]);
+    }
+
     public function test_collection_pagination_includes_products_beyond_first_hundred(): void
     {
         $category = Category::factory()->create(['slug' => 'cd-players']);

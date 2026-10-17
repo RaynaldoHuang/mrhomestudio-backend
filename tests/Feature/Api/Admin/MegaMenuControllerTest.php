@@ -65,6 +65,18 @@ class MegaMenuControllerTest extends TestCase
             ->assertJsonValidationErrors('groups.0.links.0.href');
     }
 
+    public function test_saving_incomplete_view_all_url_creates_a_working_collection_destination(): void
+    {
+        $this->postJson('/api/admin/mega-menus', [...$this->validPayload(), 'label' => 'Source', 'href' => '/collection/'])
+            ->assertCreated()->assertJsonPath('data.href', '/collection/source');
+        $menu = MegaMenu::query()->where('label', 'Source')->firstOrFail();
+        $this->assertDatabaseHas('mega_menus', ['id' => $menu->id, 'href' => '/collection/source']);
+
+        $this->putJson("/api/admin/mega-menus/{$menu->id}", [...$this->validPayload(), 'label' => 'Amplifiers', 'href' => '/collection'])
+            ->assertOk()->assertJsonPath('data.href', '/collection/amplifiers');
+        $this->assertDatabaseHas('mega_menus', ['id' => $menu->id, 'href' => '/collection/amplifiers']);
+    }
+
     public function test_destroy_removes_menu_and_image(): void
     {
         Storage::fake('public');
