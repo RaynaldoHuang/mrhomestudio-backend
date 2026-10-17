@@ -23,11 +23,14 @@ class UpdateMegaMenuRequest extends FormRequest
      */
     public function rules(): array
     {
+        $displayMode = $this->input('display_mode', $this->route('mega_menu')?->display_mode ?? 'grouped');
+
         return [
+            'display_mode' => ['sometimes', 'required', 'in:grouped,direct'],
             'label' => ['required', 'string', 'max:100'],
             'href' => ['required', 'string', 'max:2048'],
             'groups' => ['required', 'array', 'min:1', 'max:3'],
-            'groups.*.title' => ['required', 'string', 'max:100'],
+            'groups.*.title' => [$displayMode === 'direct' ? 'nullable' : 'required', 'string', 'max:100'],
             'groups.*.links' => ['required', 'array', 'min:1', 'max:12'],
             'groups.*.links.*.label' => ['required', 'string', 'max:100'],
             'groups.*.links.*.category_id' => ['sometimes', 'nullable', 'integer', 'exists:categories,id'],

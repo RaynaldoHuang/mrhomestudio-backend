@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 #[Fillable([
-    'label', 'href', 'groups', 'featured_title', 'featured_url',
+    'label', 'href', 'groups', 'display_mode', 'featured_title', 'featured_url',
     'featured_image_path', 'featured_image_alt', 'sort_order', 'is_active',
 ])]
 class MegaMenu extends Model

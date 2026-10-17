@@ -38,6 +38,7 @@ class MenuCategories
         }
 
         foreach ($groups as &$group) {
+            $group['title'] = $group['title'] ?? '';
             foreach ($group['links'] as &$link) {
                 $slug = self::collectionSlug($link['href']);
                 if ($slug === null) {
@@ -92,11 +93,11 @@ class MenuCategories
     public function references(): array
     {
         $references = [];
-        foreach (MegaMenu::query()->orderBy('sort_order')->orderBy('id')->get(['id', 'label', 'groups']) as $menu) {
+        foreach (MegaMenu::query()->orderBy('sort_order')->orderBy('id')->get(['id', 'label', 'groups', 'display_mode']) as $menu) {
             foreach ($menu->groups ?? [] as $group) {
                 foreach ($group['links'] ?? [] as $link) {
                     if (isset($link['category_id'])) {
-                        $references[(int) $link['category_id']][] = $menu->label.' / '.$group['title'];
+                        $references[(int) $link['category_id']][] = ($menu->display_mode === 'direct' || empty($group['title'])) ? $menu->label : $menu->label.' / '.$group['title'];
                     }
                 }
             }

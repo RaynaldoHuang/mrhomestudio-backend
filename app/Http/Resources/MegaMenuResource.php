@@ -20,6 +20,7 @@ class MegaMenuResource extends JsonResource
             'label' => $this->label,
             'href' => $this->href,
             'groups' => $this->groups,
+            'display_mode' => $this->display_mode ?? 'grouped',
             'featured_title' => $this->featured_title,
             'featured_url' => $this->featured_url,
             'featured_image_url' => $this->featured_image_path === null
