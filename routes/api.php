@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\Admin\BrandController as AdminBrandController;
 use App\Http\Controllers\Api\Admin\CarouselController as AdminCarouselController;
 use App\Http\Controllers\Api\Admin\CategoryController as AdminCategoryController;
 use App\Http\Controllers\Api\Admin\MegaMenuController as AdminMegaMenuController;
@@ -28,6 +29,7 @@ Route::apiResource('products', ProductController::class)
     ->names('products');
 
 Route::middleware('super.admin')->group(function (): void {
+    Route::apiResource('admin/brands', AdminBrandController::class)->except('show')->names('admin.brands');
     Route::apiResource('admin/categories', AdminCategoryController::class)->except('show')->names('admin.categories');
     Route::get('auth/me', [AuthController::class, 'me'])->name('auth.me');
     Route::patch('auth/profile', [AuthController::class, 'updateProfile'])->name('auth.profile.update');

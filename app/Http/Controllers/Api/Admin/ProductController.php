@@ -22,7 +22,7 @@ class ProductController extends Controller
     public function index(): AnonymousResourceCollection
     {
         return ProductResource::collection(
-            Product::query()->with(['images', 'productCategory'])->latest()->get(),
+            Product::query()->with(['images', 'productCategory', 'productBrand'])->latest()->get(),
         );
     }
 
@@ -53,12 +53,12 @@ class ProductController extends Controller
             throw $exception;
         }
 
-        return (new ProductResource($product->load(['images', 'productCategory'])))->response()->setStatusCode(201);
+        return (new ProductResource($product->load(['images', 'productCategory', 'productBrand'])))->response()->setStatusCode(201);
     }
 
     public function show(Product $product): ProductResource
     {
-        return new ProductResource($product->load(['images', 'productCategory']));
+        return new ProductResource($product->load(['images', 'productCategory', 'productBrand']));
     }
 
     public function update(UpdateProductRequest $request, Product $product, ImageUpload $imageUpload): ProductResource
@@ -108,7 +108,7 @@ class ProductController extends Controller
             Storage::disk('public')->delete($image->path);
         }
 
-        return new ProductResource($product->refresh()->load(['images', 'productCategory']));
+        return new ProductResource($product->refresh()->load(['images', 'productCategory', 'productBrand']));
     }
 
     public function destroy(Product $product): JsonResponse

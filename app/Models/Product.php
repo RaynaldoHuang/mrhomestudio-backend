@@ -14,7 +14,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'slug',
     'category',
     'category_id',
-    'brand',
+    'brand_id',
     'price',
     'description',
     'specifications',
@@ -26,6 +26,11 @@ class Product extends Model
 {
     /** @use HasFactory<ProductFactory> */
     use HasFactory;
+
+    public function productBrand(): BelongsTo
+    {
+        return $this->belongsTo(Brand::class, 'brand_id');
+    }
 
     public function productCategory(): BelongsTo
     {

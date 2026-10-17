@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Api\Admin;
 
+use App\Models\Brand;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\User;
@@ -32,10 +33,11 @@ class ProductControllerTest extends TestCase
     {
         Storage::fake('public');
 
+        $brand = Brand::factory()->create(['name' => 'Marantz']);
         $response = $this->post('/api/admin/products', [
             ...$this->validPayload(),
             'show_on_home' => '1',
-            'brand' => 'Marantz',
+            'brand_id' => $brand->id,
             'images' => [
                 UploadedFile::fake()->image('thumbnail.jpg', 2000, 1000),
                 UploadedFile::fake()->image('detail.jpg'),
@@ -53,7 +55,7 @@ class ProductControllerTest extends TestCase
 
         $product = Product::query()->firstOrFail();
         $this->assertSame('reference-speaker', $product->slug);
-        $this->assertDatabaseHas('products', ['id' => $product->id, 'show_on_home' => true, 'brand' => 'Marantz']);
+        $this->assertDatabaseHas('products', ['id' => $product->id, 'show_on_home' => true, 'brand_id' => $brand->id]);
         Storage::disk('public')->assertExists($product->images()->firstOrFail()->path);
         foreach ($product->images as $image) {
             $this->assertStringEndsWith('.webp', $image->path);
@@ -192,25 +194,28 @@ class ProductControllerTest extends TestCase
     #[TestWith(['Accuphase'])]
     #[TestWith(['Marantz'])]
     #[TestWith([null])]
-    public function test_update_saves_or_clears_brand(?string $brand): void
+    public function test_update_saves_or_clears_brand(?string $brandName): void
     {
-        $product = Product::factory()->create(['brand' => 'Previous Brand']);
+        $original = Brand::factory()->create(['name' => 'Previous Brand']);
+        $brand = $brandName === null ? null : Brand::factory()->create(['name' => $brandName]);
+        $product = Product::factory()->create(['brand_id' => $original->id]);
         $product->images()->create(['path' => 'products/existing.jpg', 'sort_order' => 0]);
 
         $this->putJson("/api/admin/products/{$product->id}", [
             ...$this->validPayload(),
-            'brand' => $brand,
-        ])->assertOk()->assertJsonPath('data.brand', $brand);
+            'brand_id' => $brand?->id,
+        ])->assertOk()->assertJsonPath('data.brand', $brandName)->assertJsonPath('data.brand_id', $brand?->id);
 
-        $this->assertDatabaseHas('products', ['id' => $product->id, 'brand' => $brand]);
+        $this->assertDatabaseHas('products', ['id' => $product->id, 'brand_id' => $brand?->id]);
     }
 
-    #[TestWith(['brand', 123, 'The brand field must be a string.'])]
-    #[TestWith(['brand', 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx', 'The brand field must not be greater than 100 characters.'])]
+    #[TestWith(['brand_id', 'invalid', 'The brand id field must be an integer.'])]
+    #[TestWith(['brand_id', 999999, 'The selected brand id is invalid.'])]
     public function test_store_and_update_reject_invalid_catalog_fields_with_422(string $field, mixed $value, string $message): void
     {
         Storage::fake('public');
-        $product = Product::factory()->create(['brand' => 'Original']);
+        $brand = Brand::factory()->create(['name' => 'Original']);
+        $product = Product::factory()->create(['brand_id' => $brand->id]);
         $product->images()->create(['path' => 'products/existing.jpg', 'sort_order' => 0]);
         $payload = [...$this->validPayload(), $field => $value];
 
@@ -220,7 +225,7 @@ class ProductControllerTest extends TestCase
             ->assertUnprocessable()->assertJsonValidationErrors([$field => $message]);
 
         $this->assertDatabaseCount('products', 1);
-        $this->assertDatabaseHas('products', ['id' => $product->id, 'brand' => 'Original']);
+        $this->assertDatabaseHas('products', ['id' => $product->id, 'brand_id' => $brand->id]);
     }
 
     /**

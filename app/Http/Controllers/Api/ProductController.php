@@ -30,7 +30,7 @@ class ProductController extends Controller
 
         return ProductResource::collection(
             Product::query()
-                ->with(['images', 'productCategory'])
+                ->with(['images', 'productCategory', 'productBrand'])
                 ->where('is_active', true)
                 ->where(fn ($query) => $query->whereNull('category_id')->orWhereHas('productCategory', fn ($category) => $category->where('is_active', true)))
                 ->when($categoryIds !== null, fn ($query) => $query->whereIn('category_id', $categoryIds))
@@ -47,6 +47,6 @@ class ProductController extends Controller
     {
         abort_unless($product->is_active && ($product->category_id === null || $product->productCategory?->is_active), 404);
 
-        return new ProductResource($product->load(['images', 'productCategory']));
+        return new ProductResource($product->load(['images', 'productCategory', 'productBrand']));
     }
 }
