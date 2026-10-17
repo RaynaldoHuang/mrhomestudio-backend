@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'slug',
     'category',
     'category_id',
+    'brand',
     'price',
     'description',
     'specifications',

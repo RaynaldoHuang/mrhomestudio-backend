@@ -35,6 +35,7 @@ class ProductControllerTest extends TestCase
         $response = $this->post('/api/admin/products', [
             ...$this->validPayload(),
             'show_on_home' => '1',
+            'brand' => 'Marantz',
             'images' => [
                 UploadedFile::fake()->image('thumbnail.jpg', 2000, 1000),
                 UploadedFile::fake()->image('detail.jpg'),
@@ -45,13 +46,14 @@ class ProductControllerTest extends TestCase
             ->assertCreated()
             ->assertJsonPath('data.name', 'Reference Speaker')
             ->assertJsonPath('data.show_on_home', true)
+            ->assertJsonPath('data.brand', 'Marantz')
             ->assertJsonPath('data.variants.0.name', 'Color')
             ->assertJsonPath('data.images.0.sort_order', 0)
             ->assertJsonCount(2, 'data.images');
 
         $product = Product::query()->firstOrFail();
         $this->assertSame('reference-speaker', $product->slug);
-        $this->assertDatabaseHas('products', ['id' => $product->id, 'show_on_home' => true]);
+        $this->assertDatabaseHas('products', ['id' => $product->id, 'show_on_home' => true, 'brand' => 'Marantz']);
         Storage::disk('public')->assertExists($product->images()->firstOrFail()->path);
         foreach ($product->images as $image) {
             $this->assertStringEndsWith('.webp', $image->path);
@@ -185,6 +187,40 @@ class ProductControllerTest extends TestCase
             ->assertJsonMissingPath('data.stock');
 
         $this->assertDatabaseHas('products', ['id' => $product->id, 'stock' => 7, 'name' => 'Reference Speaker']);
+    }
+
+    #[TestWith(['Accuphase'])]
+    #[TestWith(['Marantz'])]
+    #[TestWith([null])]
+    public function test_update_saves_or_clears_brand(?string $brand): void
+    {
+        $product = Product::factory()->create(['brand' => 'Previous Brand']);
+        $product->images()->create(['path' => 'products/existing.jpg', 'sort_order' => 0]);
+
+        $this->putJson("/api/admin/products/{$product->id}", [
+            ...$this->validPayload(),
+            'brand' => $brand,
+        ])->assertOk()->assertJsonPath('data.brand', $brand);
+
+        $this->assertDatabaseHas('products', ['id' => $product->id, 'brand' => $brand]);
+    }
+
+    #[TestWith(['brand', 123, 'The brand field must be a string.'])]
+    #[TestWith(['brand', 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx', 'The brand field must not be greater than 100 characters.'])]
+    public function test_store_and_update_reject_invalid_catalog_fields_with_422(string $field, mixed $value, string $message): void
+    {
+        Storage::fake('public');
+        $product = Product::factory()->create(['brand' => 'Original']);
+        $product->images()->create(['path' => 'products/existing.jpg', 'sort_order' => 0]);
+        $payload = [...$this->validPayload(), $field => $value];
+
+        $this->post('/api/admin/products', [...$payload, 'images' => [UploadedFile::fake()->image('new.jpg')]], ['Accept' => 'application/json'])
+            ->assertUnprocessable()->assertJsonValidationErrors([$field => $message]);
+        $this->putJson("/api/admin/products/{$product->id}", $payload)
+            ->assertUnprocessable()->assertJsonValidationErrors([$field => $message]);
+
+        $this->assertDatabaseCount('products', 1);
+        $this->assertDatabaseHas('products', ['id' => $product->id, 'brand' => 'Original']);
     }
 
     /**
