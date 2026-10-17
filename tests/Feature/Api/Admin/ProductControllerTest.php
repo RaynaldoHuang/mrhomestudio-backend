@@ -228,6 +228,119 @@ class ProductControllerTest extends TestCase
         $this->assertDatabaseHas('products', ['id' => $product->id, 'brand_id' => $brand->id]);
     }
 
+    public function test_duplicate_creates_inactive_copy_with_independent_ordered_images(): void
+    {
+        Storage::fake('public');
+        $category = Category::factory()->create();
+        $brand = Brand::factory()->create();
+        $source = Product::factory()->create([
+            'name' => 'Reference Speaker', 'slug' => 'reference-speaker',
+            'category_id' => $category->id, 'brand_id' => $brand->id,
+            'is_active' => true, 'show_on_home' => true, 'stock' => 7,
+        ]);
+        Storage::disk('public')->put('products/first.webp', 'first image');
+        Storage::disk('public')->put('products/second.webp', 'second image');
+        $source->images()->create(['path' => 'products/second.webp', 'sort_order' => 8]);
+        $source->images()->create(['path' => 'products/first.webp', 'sort_order' => 2]);
+
+        $response = $this->postJson("/api/admin/products/{$source->id}/duplicate");
+        $response->assertCreated()->assertJsonPath('data.name', 'Reference Speaker (Copy)')
+            ->assertJsonPath('data.slug', 'reference-speaker-copy')
+            ->assertJsonPath('data.category_id', $category->id)->assertJsonPath('data.brand_id', $brand->id)
+            ->assertJsonPath('data.is_active', false)->assertJsonPath('data.show_on_home', false)
+            ->assertJsonPath('data.price', $source->price)->assertJsonPath('data.description', $source->description)
+            ->assertJsonPath('data.specifications', $source->specifications)->assertJsonPath('data.variants', $source->variants)
+            ->assertJsonCount(2, 'data.images')->assertJsonPath('data.images.0.sort_order', 0)->assertJsonPath('data.images.1.sort_order', 1);
+        $copy = Product::query()->findOrFail($response->json('data.id'));
+        $this->assertNotSame($source->id, $copy->id);
+        $this->assertDatabaseHas('products', ['id' => $copy->id, 'stock' => 0, 'is_active' => false]);
+        $this->assertDatabaseHas('products', ['id' => $source->id, 'is_active' => true, 'show_on_home' => true, 'name' => 'Reference Speaker']);
+        $this->assertSame('first image', Storage::disk('public')->get($copy->images[0]->path));
+        $this->assertSame('second image', Storage::disk('public')->get($copy->images[1]->path));
+        $this->assertNotSame('products/first.webp', $copy->images[0]->path);
+        $this->getJson("/api/products/{$copy->id}")->assertNotFound();
+
+        $this->deleteJson("/api/admin/products/{$source->id}")->assertNoContent();
+        Storage::disk('public')->assertExists($copy->images[0]->path);
+        Storage::disk('public')->assertExists($copy->images[1]->path);
+    }
+
+    public function test_deleting_a_copy_preserves_original_images(): void
+    {
+        Storage::fake('public');
+        $source = Product::factory()->create();
+        Storage::disk('public')->put('products/original.webp', 'original');
+        $source->images()->create(['path' => 'products/original.webp', 'sort_order' => 0]);
+        $response = $this->postJson("/api/admin/products/{$source->id}/duplicate")->assertCreated();
+        $copy = Product::query()->findOrFail($response->json('data.id'));
+        $copyPath = $copy->images->first()->path;
+        $this->deleteJson("/api/admin/products/{$copy->id}")->assertNoContent();
+        Storage::disk('public')->assertMissing($copyPath);
+        Storage::disk('public')->assertExists('products/original.webp');
+        $this->assertModelExists($source);
+    }
+
+    public function test_repeated_duplicates_use_unique_slugs_for_maximum_length_names(): void
+    {
+        Storage::fake('public');
+        $source = Product::factory()->inactive()->create(['name' => str_repeat('a', 255)]);
+        Storage::disk('public')->put('products/original.webp', 'original');
+        $source->images()->create(['path' => 'products/original.webp', 'sort_order' => 0]);
+        $first = $this->postJson("/api/admin/products/{$source->id}/duplicate")->assertCreated()->json('data');
+        $second = $this->postJson("/api/admin/products/{$source->id}/duplicate")->assertCreated()->json('data');
+        $this->assertNotSame($first['slug'], $second['slug']);
+        $this->assertSame(255, strlen($first['name']));
+        $this->assertSame(255, strlen($second['slug']));
+        $this->assertDatabaseCount('products', 3);
+    }
+
+    public function test_duplicate_rejects_missing_image_and_cleans_up_copied_files_with_422(): void
+    {
+        Storage::fake('public');
+        $source = Product::factory()->create();
+        Storage::disk('public')->put('products/existing.webp', 'existing');
+        $source->images()->create(['path' => 'products/existing.webp', 'sort_order' => 0]);
+        $source->images()->create(['path' => 'products/missing.webp', 'sort_order' => 1]);
+        $this->postJson("/api/admin/products/{$source->id}/duplicate")->assertUnprocessable()->assertJsonValidationErrors('images');
+        $this->assertDatabaseCount('products', 1);
+        $this->assertDatabaseCount('product_images', 2);
+        $this->assertSame(['products/existing.webp'], Storage::disk('public')->allFiles('products'));
+    }
+
+    #[TestWith([0])]
+    #[TestWith([6])]
+    public function test_duplicate_with_invalid_image_count_returns_422(int $imageCount): void
+    {
+        $source = Product::factory()->create();
+        for ($index = 0; $index < $imageCount; $index++) {
+            $source->images()->create(['path' => "products/image-{$index}.webp", 'sort_order' => $index]);
+        }
+        $this->postJson("/api/admin/products/{$source->id}/duplicate")->assertUnprocessable()->assertJsonValidationErrors('images');
+        $this->assertDatabaseCount('products', 1);
+    }
+
+    public function test_duplicate_unknown_product_returns_404(): void
+    {
+        $this->postJson('/api/admin/products/999999/duplicate')->assertNotFound();
+        $this->assertDatabaseCount('products', 0);
+    }
+
+    public function test_duplicate_without_authentication_returns_401(): void
+    {
+        $source = Product::factory()->create();
+        $this->withHeaders(['Authorization' => ''])->postJson("/api/admin/products/{$source->id}/duplicate")->assertUnauthorized();
+        $this->assertDatabaseCount('products', 1);
+    }
+
+    public function test_duplicate_by_non_admin_returns_401(): void
+    {
+        $source = Product::factory()->create();
+        $token = 'customer-product-token';
+        User::factory()->create(['role' => 'customer', 'api_token' => hash('sha256', $token), 'api_token_expires_at' => now()->addHour()]);
+        $this->withToken($token)->postJson("/api/admin/products/{$source->id}/duplicate")->assertUnauthorized();
+        $this->assertDatabaseCount('products', 1);
+    }
+
     /**
      * @return array<string, mixed>
      */

@@ -43,6 +43,9 @@ Route::middleware('super.admin')->group(function (): void {
     Route::apiResource('admin/mega-menus', AdminMegaMenuController::class)
         ->names('admin.mega-menus');
 
+    Route::post('admin/products/{product}/duplicate', [AdminProductController::class, 'duplicate'])
+        ->name('admin.products.duplicate');
+
     Route::apiResource('admin/products', AdminProductController::class)
         ->names('admin.products');
 });

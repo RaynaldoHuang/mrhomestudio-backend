@@ -120,6 +120,45 @@ class ProductController extends Controller
         return response()->json(status: 204);
     }
 
+    public function duplicate(Product $product): JsonResponse
+    {
+        $product->load('images');
+        if ($product->images->count() < 1 || $product->images->count() > 5) {
+            throw ValidationException::withMessages(['images' => ['A product must have between 1 and 5 images before it can be duplicated.']]);
+        }
+
+        $attributes = $product->only(['category', 'category_id', 'brand_id', 'price', 'description', 'specifications', 'variants']);
+        $attributes['name'] = Str::substr($product->name, 0, 248).' (Copy)';
+        $attributes['slug'] = $this->uniqueSlug($attributes['name']);
+        $attributes['is_active'] = false;
+        $attributes['show_on_home'] = false;
+        $imagePaths = [];
+
+        try {
+            foreach ($product->images as $image) {
+                $path = 'products/'.Str::uuid().'.'.pathinfo($image->path, PATHINFO_EXTENSION);
+                if (! Storage::disk('public')->copy($image->path, $path)) {
+                    throw ValidationException::withMessages(['images' => ['Unable to copy a product image. Check the original images and try again.']]);
+                }
+                $imagePaths[] = $path;
+            }
+
+            $duplicate = DB::transaction(function () use ($attributes, $imagePaths): Product {
+                $duplicate = Product::query()->create($attributes);
+                foreach ($imagePaths as $sortOrder => $path) {
+                    $duplicate->images()->create(['path' => $path, 'sort_order' => $sortOrder]);
+                }
+
+                return $duplicate;
+            });
+        } catch (Throwable $exception) {
+            Storage::disk('public')->delete($imagePaths);
+            throw $exception;
+        }
+
+        return (new ProductResource($duplicate->load(['images', 'productCategory', 'productBrand'])))->response()->setStatusCode(201);
+    }
+
     private function uniqueSlug(string $name, ?Product $ignoredProduct = null): string
     {
         $baseSlug = Str::slug($name) ?: 'product';
@@ -130,7 +169,8 @@ class ProductController extends Controller
             ->when($ignoredProduct, fn ($query) => $query->whereKeyNot($ignoredProduct->getKey()))
             ->where('slug', $slug)
             ->exists()) {
-            $slug = $baseSlug.'-'.$suffix;
+            $slugSuffix = '-'.$suffix;
+            $slug = Str::substr($baseSlug, 0, 255 - Str::length($slugSuffix)).$slugSuffix;
             $suffix++;
         }
 
