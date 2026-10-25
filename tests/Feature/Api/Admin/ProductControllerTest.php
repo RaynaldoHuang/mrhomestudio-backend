@@ -101,6 +101,36 @@ class ProductControllerTest extends TestCase
         $this->assertSame('image/webp', getimagesizefromstring(Storage::disk('public')->get($newImage->path))['mime']);
     }
 
+    public function test_clearing_copied_variants_and_specifications_persists_without_changing_original(): void
+    {
+        Storage::fake('public');
+        $source = Product::factory()->create([
+            'variants' => [['name' => 'Color', 'values' => ['Black', 'White']]],
+            'specifications' => [['name' => 'Weight', 'value' => '12 kg']],
+        ]);
+        Storage::disk('public')->put('products/original.webp', 'image');
+        $source->images()->create(['path' => 'products/original.webp', 'sort_order' => 0]);
+        $copyId = $this->postJson("/api/admin/products/{$source->id}/duplicate")
+            ->assertCreated()->json('data.id');
+
+        $this->post("/api/admin/products/{$copyId}", [
+            ...$this->validPayload(),
+            '_method' => 'PUT',
+            'variants' => '',
+            'specifications' => '',
+        ], ['Accept' => 'application/json'])
+            ->assertOk()
+            ->assertJsonPath('data.variants', [])
+            ->assertJsonPath('data.specifications', []);
+
+        $this->getJson("/api/admin/products/{$copyId}")->assertOk()
+            ->assertJsonPath('data.variants', [])
+            ->assertJsonPath('data.specifications', []);
+        $this->assertDatabaseHas('products', ['id' => $copyId, 'variants' => null, 'specifications' => null]);
+        $this->assertSame([['name' => 'Color', 'values' => ['Black', 'White']]], $source->fresh()->variants);
+        $this->assertSame([['name' => 'Weight', 'value' => '12 kg']], $source->fresh()->specifications);
+    }
+
     public function test_destroy_removes_product_and_images(): void
     {
         Storage::fake('public');
