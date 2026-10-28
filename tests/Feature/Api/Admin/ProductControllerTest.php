@@ -371,6 +371,93 @@ class ProductControllerTest extends TestCase
         $this->assertDatabaseCount('products', 1);
     }
 
+    public function test_store_saves_numeric_combination_prices_and_exposes_the_lowest_price_publicly(): void
+    {
+        Storage::fake('public');
+        $this->post('/api/admin/products', [
+            ...$this->validPayload(),
+            'price' => 100,
+            'variants' => [
+                ['name' => 'Color', 'values' => ['Black', 'White']],
+                ['name' => 'Size', 'values' => ['Small', 'Large']],
+            ],
+            'variant_prices' => [
+                ['options' => ['Black', 'Small'], 'price' => '80'],
+                ['options' => ['White', 'Large'], 'price' => '150'],
+            ],
+            'images' => [UploadedFile::fake()->image('speaker.jpg')],
+        ], ['Accept' => 'application/json'])
+            ->assertCreated()
+            ->assertJsonPath('data.price', 100)
+            ->assertJsonPath('data.min_price', 80)
+            ->assertJsonPath('data.max_price', 150)
+            ->assertJsonPath('data.variant_prices.0.price', 80);
+
+        $product = Product::query()->firstOrFail();
+        $this->assertSame([
+            ['options' => ['Black', 'Small'], 'price' => 80],
+            ['options' => ['White', 'Large'], 'price' => 150],
+        ], $product->variant_prices);
+        Storage::disk('public')->assertExists($product->images->first()->path);
+        $this->getJson("/api/products/{$product->id}")
+            ->assertOk()->assertJsonPath('data.min_price', 80)->assertJsonPath('data.max_price', 150);
+    }
+
+    public function test_update_ignores_unused_base_price_when_every_variant_has_the_same_custom_price(): void
+    {
+        $product = Product::factory()->hasImages(1)->create();
+        $this->putJson("/api/admin/products/{$product->id}", [
+            ...$this->validPayload(),
+            'price' => 1,
+            'variant_prices' => [
+                ['options' => ['Black'], 'price' => 250],
+                ['options' => ['White'], 'price' => 250],
+            ],
+        ])->assertOk()->assertJsonPath('data.min_price', 250)->assertJsonPath('data.max_price', 250);
+        $this->assertSame(250, $product->refresh()->variant_prices[0]['price']);
+    }
+
+    public function test_update_can_clear_combination_prices_and_return_to_base_price(): void
+    {
+        $product = Product::factory()->hasImages(1)->create([
+            'variant_prices' => [['options' => ['Black'], 'price' => 80]],
+        ]);
+        $this->putJson("/api/admin/products/{$product->id}", [
+            ...$this->validPayload(), 'variant_prices' => '',
+        ])->assertOk()->assertJsonPath('data.variant_prices', [])->assertJsonPath('data.min_price', 15_000_000);
+        $this->assertSame([], $product->refresh()->variant_prices);
+    }
+
+    #[TestWith([[['options' => ['Missing'], 'price' => 100]], 'variant_prices.0.options'])]
+    #[TestWith([[['options' => ['Black', 'Extra'], 'price' => 100]], 'variant_prices.0.options'])]
+    #[TestWith([[['options' => ['Black'], 'price' => -1]], 'variant_prices.0.price'])]
+    #[TestWith([[['options' => ['Black'], 'price' => 1.5]], 'variant_prices.0.price'])]
+    #[TestWith([[['options' => ['Black'], 'price' => 9007199254740992]], 'variant_prices.0.price'])]
+    #[TestWith([[['options' => ['Black'], 'price' => 100], ['options' => ['Black'], 'price' => 200]], 'variant_prices.1.options'])]
+    public function test_update_rejects_invalid_prices_without_changing_the_product(array $prices, string $error): void
+    {
+        $product = Product::factory()->hasImages(1)->create(['price' => 500]);
+        $this->putJson("/api/admin/products/{$product->id}", [
+            ...$this->validPayload(), 'variant_prices' => $prices,
+        ])->assertUnprocessable()->assertJsonValidationErrors($error);
+        $this->assertSame(500, $product->refresh()->price);
+        $this->assertNull($product->variant_prices);
+    }
+
+    public function test_duplicate_preserves_variant_prices(): void
+    {
+        Storage::fake('public');
+        $prices = [['options' => ['Black'], 'price' => 800]];
+        $product = Product::factory()->create(['variant_prices' => $prices]);
+        Storage::disk('public')->put('products/original.jpg', 'image');
+        $product->images()->create(['path' => 'products/original.jpg', 'sort_order' => 0]);
+        $response = $this->postJson("/api/admin/products/{$product->id}/duplicate")
+            ->assertCreated()->assertJsonPath('data.variant_prices', $prices);
+        $duplicate = Product::query()->findOrFail($response->json('data.id'));
+        $this->assertSame($prices, $duplicate->variant_prices);
+        Storage::disk('public')->assertExists($duplicate->images->first()->path);
+    }
+
     /**
      * @return array<string, mixed>
      */

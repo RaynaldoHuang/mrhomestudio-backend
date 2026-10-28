@@ -19,6 +19,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'description',
     'specifications',
     'variants',
+    'variant_prices',
     'is_active',
     'show_on_home',
 ])]
@@ -56,6 +57,7 @@ class Product extends Model
             'price' => 'integer',
             'specifications' => 'array',
             'variants' => 'array',
+            'variant_prices' => 'array',
             'is_active' => 'boolean',
             'show_on_home' => 'boolean',
         ];

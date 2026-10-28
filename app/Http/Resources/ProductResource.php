@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\ProductVariantPricing;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Facades\Storage;
@@ -15,6 +16,8 @@ class ProductResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
+        $priceRange = ProductVariantPricing::range($this->resource);
+
         return [
             'id' => $this->id,
             'name' => $this->name,
@@ -25,6 +28,9 @@ class ProductResource extends JsonResource
             'brand' => $this->productBrand?->name,
             'brand_id' => $this->brand_id,
             'price' => $this->price,
+            'min_price' => $priceRange['min'],
+            'max_price' => $priceRange['max'],
+            'variant_prices' => $this->variant_prices ?? [],
             'description' => $this->description,
             'specifications' => $this->specifications ?? [],
             'variants' => $this->variants ?? [],

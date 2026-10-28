@@ -9,6 +9,7 @@ use App\Http\Resources\ProductResource;
 use App\ImageUpload;
 use App\Models\Category;
 use App\Models\Product;
+use App\ProductVariantPricing;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\DB;
@@ -32,6 +33,7 @@ class ProductController extends Controller
         if (array_key_exists('category_id', $attributes)) {
             $attributes['category'] = isset($attributes['category_id']) ? Category::query()->findOrFail($attributes['category_id'])->name : null;
         }
+        $attributes = ProductVariantPricing::normalize($attributes);
         $attributes['slug'] = $this->uniqueSlug($attributes['name']);
 
         $imagePaths = $imageUpload->storeMany($request->file('images', []), 'products', 1600);
@@ -75,9 +77,13 @@ class ProductController extends Controller
         }
 
         $attributes = $request->safe()->except(['images', 'remove_image_ids']);
+        if (array_key_exists('variants', $attributes) && ! array_key_exists('variant_prices', $attributes)) {
+            $attributes['variant_prices'] = [];
+        }
         if (array_key_exists('category_id', $attributes)) {
             $attributes['category'] = isset($attributes['category_id']) ? Category::query()->findOrFail($attributes['category_id'])->name : null;
         }
+        $attributes = ProductVariantPricing::normalize($attributes);
         if ($attributes['name'] !== $product->name) {
             $attributes['slug'] = $this->uniqueSlug($attributes['name'], $product);
         }
@@ -127,7 +133,7 @@ class ProductController extends Controller
             throw ValidationException::withMessages(['images' => ['A product must have between 1 and 5 images before it can be duplicated.']]);
         }
 
-        $attributes = $product->only(['category', 'category_id', 'brand_id', 'price', 'description', 'specifications', 'variants']);
+        $attributes = $product->only(['category', 'category_id', 'brand_id', 'price', 'description', 'specifications', 'variants', 'variant_prices']);
         $attributes['name'] = Str::substr($product->name, 0, 248).' (Copy)';
         $attributes['slug'] = $this->uniqueSlug($attributes['name']);
         $attributes['is_active'] = false;
